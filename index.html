@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Horror Maze Ultimate</title>
+
+<style>
+body{margin:0;overflow:hidden;background:black;font-family:Arial;}
+
+#msg{position:absolute;top:20px;width:100%;text-align:center;color:red;}
+
+#restart{
+position:absolute;top:60px;left:50%;
+transform:translateX(-50%);
+padding:10px;background:red;color:white;
+display:none;
+}
+
+#win{
+position:absolute;top:40%;width:100%;
+text-align:center;color:lime;font-size:30px;
+display:none;
+}
+
+#startScreen{
+position:absolute;top:0;left:0;width:100%;height:100%;
+background:black;color:white;
+display:flex;flex-direction:column;
+justify-content:center;align-items:center;
+z-index:10;text-align:center;
+}
+
+#controls{
+position:absolute;bottom:20px;left:20px;
+width:120px;height:120px;border:2px solid white;
+border-radius:50%;
+}
+.btn{
+position:absolute;width:40px;height:40px;
+background:white;border-radius:50%;opacity:0.6;
+}
+#up{top:0;left:40px;}
+#down{bottom:0;left:40px;}
+#left{left:0;top:40px;}
+#right{right:0;top:40px;}
+</style>
+</head>
+
+<body>
+
+<div id="msg">Escape the maze 👻</div>
+<button id="restart" onclick="location.reload()">Restart</button>
+<div id="win">🎉 YOU WIN 🎉</div>
+
+<div id="startScreen">
+<h2>🎮 CONTROLS</h2>
+<p>W = Forward</p>
+<p>S = Back</p>
+<p>A = Left</p>
+<p>D = Right</p>
+<p>Mouse = Look</p>
+<p>Click to Start</p>
+</div>
+
+<div id="controls">
+<div id="up" class="btn"></div>
+<div id="down" class="btn"></div>
+<div id="left" class="btn"></div>
+<div id="right" class="btn"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+<script>
+// AUDIO
+let bg=new Audio("bg.mp3"); bg.loop=true;
+let scare=new Audio("scare.mp3");
+let winSound=new Audio("win.mp3");
+let heartbeat=new Audio("heartbeat.mp3"); heartbeat.loop=true;
+
+// START
+document.body.onclick=()=>{
+bg.play();
+document.body.requestPointerLock();
+document.getElementById("startScreen").style.display="none";
+};
+
+// SCENE
+let scene=new THREE.Scene();
+scene.background=new THREE.Color("black");
+scene.fog=new THREE.Fog(0x000000,5,30);
+
+// CAMERA
+let camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
+let renderer=new THREE.WebGLRenderer();
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// LIGHT
+scene.add(new THREE.AmbientLight(0xffffff,0.3));
+let light=new THREE.SpotLight("white",2);
+scene.add(light);
+scene.add(light.target);
+
+// FLOOR
+let floor=new THREE.Mesh(
+new THREE.PlaneGeometry(200,200),
+new THREE.MeshStandardMaterial({color:"gray"})
+);
+floor.rotation.x=-Math.PI/2;
+scene.add(floor);
+
+// WALLS
+let walls=[];
+function createWall(x,z){
+let w=new THREE.Mesh(
+new THREE.BoxGeometry(4,6,4),
+new THREE.MeshStandardMaterial({color:"darkred"})
+);
+w.position.set(x,3,z);
+scene.add(w);
+walls.push(w);
+}
+
+// HUGE MAZE
+let size=100;
+let gap=10;
+
+for(let x=-size;x<=size;x+=gap){
+for(let z=-size;z<=size;z+=gap){
+if(x===-size||z===-size||x===size||z===size || Math.random()>0.3){
+createWall(x,z);
+}
+}
+}
+
+// PLAYER
+camera.position.set(10,2,40);
+
+// COLLISION
+function checkCollision(newX,newZ){
+for(let w of walls){
+let dx=Math.abs(newX-w.position.x);
+let dz=Math.abs(newZ-w.position.z);
+if(dx<1.8 && dz<1.8) return true;
+}
+return false;
+}
+
+// FPS MOVEMENT
+let yaw=0,pitch=0;
+function movePlayer(forward,right){
+let dx=Math.sin(yaw)*forward + Math.cos(yaw)*right;
+let dz=Math.cos(yaw)*forward - Math.sin(yaw)*right;
+
+let newX=camera.position.x+dx;
+let newZ=camera.position.z+dz;
+
+if(!checkCollision(newX,newZ)){
+camera.position.x=newX;
+camera.position.z=newZ;
+}
+}
+
+// KEYBOARD
+document.addEventListener("keydown",(e)=>{
+let s=0.5;
+if(e.key==="w") movePlayer(s,0);
+if(e.key==="s") movePlayer(-s,0);
+if(e.key==="a") movePlayer(0,-s);
+if(e.key==="d") movePlayer(0,s);
+});
+
+// MOBILE
+let move={up:false,down:false,left:false,right:false};
+["up","down","left","right"].forEach(id=>{
+document.getElementById(id).ontouchstart=()=>move[id]=true;
+document.getElementById(id).ontouchend=()=>move[id]=false;
+});
+
+// MOUSE LOOK
+document.addEventListener("mousemove",(e)=>{
+if(document.pointerLockElement===document.body){
+yaw-=e.movementX*0.002;
+pitch-=e.movementY*0.002;
+camera.rotation.order="YXZ";
+camera.rotation.y=yaw;
+camera.rotation.x=pitch;
+}
+});
+
+// GHOST
+let ghost=new THREE.Mesh(
+new THREE.SphereGeometry(2,32,32),
+new THREE.MeshStandardMaterial({color:"white"})
+);
+ghost.position.set(0,2,-80);
+ghost.visible=false;
+scene.add(ghost);
+
+let ghostActive=false;
+
+setTimeout(()=>{
+ghost.visible=true;
+ghostActive=true;
+scare.play();
+document.getElementById("msg").innerText="👻 RUN!";
+},12000);
+
+// EXIT
+let exit=new THREE.Mesh(
+new THREE.BoxGeometry(6,8,1),
+new THREE.MeshStandardMaterial({color:"green"})
+);
+exit.position.set(0,4,-95);
+scene.add(exit);
+
+// LOOP
+function animate(){
+requestAnimationFrame(animate);
+
+// MOBILE MOVE
+if(move.up) movePlayer(0.3,0);
+if(move.down) movePlayer(-0.3,0);
+if(move.left) movePlayer(0,-0.3);
+if(move.right) movePlayer(0,0.3);
+
+// LIGHT FOLLOW
+light.position.copy(camera.position);
+light.target.position.set(
+camera.position.x+Math.sin(yaw),
+camera.position.y,
+camera.position.z-Math.cos(yaw)
+);
+
+// GHOST FOLLOW
+let dx=camera.position.x-ghost.position.x;
+let dz=camera.position.z-ghost.position.z;
+
+if(ghostActive){
+ghost.position.x+=dx*0.03;
+ghost.position.z+=dz*0.03;
+}
+
+// HEARTBEAT
+let dist=Math.sqrt(dx*dx+dz*dz);
+if(dist<10){
+heartbeat.volume=0.5;
+if(heartbeat.paused) heartbeat.play();
+}else heartbeat.volume=0;
+
+// LOSE
+if(Math.abs(dx)<2 && Math.abs(dz)<2){
+scare.play();
+document.getElementById("restart").style.display="block";
+}
+
+// WIN
+if(
+Math.abs(camera.position.x-exit.position.x)<3 &&
+Math.abs(camera.position.z-exit.position.z)<3
+){
+winSound.play();
+document.getElementById("win").style.display="block";
+document.getElementById("restart").style.display="block";
+}
+
+renderer.render(scene,camera);
+}
+animate();
+</script>
+
+</body>
+</html>
